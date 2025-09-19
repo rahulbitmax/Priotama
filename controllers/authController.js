@@ -4,43 +4,60 @@ import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import { sendOtp } from "../utils/sendOtp.js";
 
-
-
-
-// Register User
+// ---------------- REGISTER ----------------
 export const registerUser = async (req, res) => {
   try {
     const { name, email, phone, gender, age, location, password } = req.body;
 
+    // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: "User already exists" });
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Handle profilePic from multer (req.file)
+    let profilePicPath = null;
+    if (req.file) {
+      profilePicPath = req.file.path; // stored path from uploadMiddleware
+    }
+
+    // Create user
     const user = await User.create({
-      name, email, phone, gender, age, location,
+      name,
+      email,
+      phone,
+      gender,
+      age,
+      location,
+      profilePic: profilePicPath,
       password: hashedPassword,
     });
 
-    // generate OTP
+    // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpHash = await bcrypt.hash(otp, 10);
 
     await Otp.create({
       userId: user._id,
       otpHash,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // expires in 5 min
     });
 
-    await sendOtp(email, otp); // send via email/SMS
+    // Send OTP via email/SMS
+    await sendOtp(email, otp);
 
-    res.status(201).json({ message: "OTP sent for verification", userId: user._id });
+    res.status(201).json({
+      message: "OTP sent for verification",
+      userId: user._id,
+      profilePic: profilePicPath,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// Verify OTP
+// ---------------- VERIFY OTP ----------------
 export const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -65,7 +82,7 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
-// Login User
+// ---------------- LOGIN ----------------
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -83,7 +100,15 @@ export const loginUser = async (req, res) => {
 
     res.json({
       token,
-      user: { id: user._id, name: user.name, email: user.email, gender: user.gender, age: user.age, location: user.location, profilePic: user.profilePic }
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        gender: user.gender,
+        age: user.age,
+        location: user.location,
+        profilePic: user.profilePic,
+      },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
